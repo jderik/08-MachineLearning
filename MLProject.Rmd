@@ -1,0 +1,124 @@
+---
+title: "PracticalMachineLearningProj"
+author: "JD"
+date: "Thursday, July 23, 2015"
+output: html_document
+---
+#### Executive Summary
+Using modern exercise devices such as Fitbit it is now possible to collect a large amount of data about personal activity relatively inexpensively. One thing that people regularly do is quantify how much of a particular activity they do, but they rarely quantify how well they do it. In this project, the goal will be to use data from accelerometers on the belt, forearm, arm, and dumbell of 6 participants. They were asked to perform barbell lifts correctly and incorrectly in 5 different ways. More information is available from the website here: http://groupware.les.inf.puc-rio.br/har (see the section on the Weight Lifting Exercise Dataset). 
+
+
+#### Objective
+
+The goal of the project is to predict the manner in which they did the exercise. This is the "classe" variable in the training set. The report will describe how the author built the model, used cross validation, explain what expected out of sample error is. The prediction model designed will be used to predict 20 different test cases. 
+
+Later the machine learning algorithm will be applied to each of the 20 test cases in the testing data set. For each test case a text file will be submitted with a single capital letter (A, B, C, D, or E) corresponding to the prediction for the corresponding problem in the test data set. 
+
+
+##### Initial Setup
+
+```{r global_options , echo=FALSE, fig.align='left'}
+library(ggplot2)
+library(lattice)
+library(caret)
+library(doParallel) 
+##The doParallel package is a \parallel backend" for the foreach package. It provides a mechanism  needed to execute foreach loops in parallel.
+
+set.seed(1001)
+
+```
+
+##### Data Load & Tidy Up
+```{r, echo=TRUE}
+setInternet2(TRUE) 
+trainURL <- "https://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv"
+testURL <- "https://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv"
+
+trainingData <- read.csv(url(trainURL), na.strings=c("NA","#DIV/0!",""))
+testingData <- read.csv(url(testURL), na.strings=c("NA","#DIV/0!",""))
+
+##Leave in data where columns having 20% NAs. Rest are removed.
+checkNAs <-which((colSums(!is.na(trainingData)) >= 0.8*nrow(trainingData)))
+trainingData <- trainingData[,checkNAs]
+testingData     <- testingData[,checkNAs]
+
+## testingData <- testingData[-ncol(testingData)]
+testingData$new_window <- factor(testingData$new_window, levels=c("yes","no"))
+
+trainingData <- trainingData[,-c(1,5)]
+testingData<- testingData[,-c(1,5)]
+
+
+
+```
+
+
+
+##### Create test training sets
+```{r, echo=TRUE}
+
+inTraining  <- createDataPartition(trainingData$classe, p = 0.8, list = FALSE)
+training    <- trainingData[inTraining, ]
+testing     <- trainingData[-inTraining, ]
+
+```
+
+
+##### Operation : Parallel Random Forest
+
+This assignment will use Parallel Random Forest for model fit.
+
+
+```{r, echo=TRUE}
+class <- training$classe
+data  <- training[-ncol(training)]
+registerDoParallel()
+plotterData <- train(data, class, method="parRF",  tuneGrid=data.frame(mtry=3),  trControl=trainControl(method="none"))
+
+plotterData
+```
+
+
+##### Plot Model
+```{r, echo=TRUE}
+plot(varImp(plotterData))
+```
+
+##### Confusion MATRIX : Testing Data
+
+Here we generate a confusion matrix against the testingData Set
+
+```{r, echo=TRUE}
+
+matrixData <- predict(plotterData, newdata=testing)
+confusionMatrixData <- confusionMatrix(matrixData,testing$classe)
+confusionMatrixData
+```
+
+
+The accuracy is as below
+```{r, echo=TRUE}
+confusionMatrixData$overall[1]
+```
+
+##### Writing Files
+
+```{r, echo=TRUE}
+
+pml_write_files = function(x){
+  n = length(x)
+  for(i in 1:n){
+    filename = paste0("problem_id_",i,".txt")
+    write.table(x[i],file=filename,quote=FALSE,row.names=FALSE,col.names=FALSE)
+  }
+}
+
+answers <- predict(plotterData, testingData)
+pml_write_files(answers)
+```
+
+
+
+
+
+
